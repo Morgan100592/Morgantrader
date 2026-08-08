@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Morgantrader - Live Signal Dashboard</title>
+<style>
+  :root{
+    --bg:#080b12; --panel:#101724; --panel-2:#151d2c; --line:#1f2a3c;
+    --text:#e8eef7; --muted:#8496ae; --green:#22c98a; --red:#ff5c74;
+    --amber:#ffb020; --blue:#4da3ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{padding:16px;border-bottom:1px solid var(--line);
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;
+    background:linear-gradient(180deg,#0d1420,#080b12);position:sticky;top:0;z-index:5}
+  h1{font-size:18px;margin:0;letter-spacing:.5px}
+  h1 span{color:var(--green)}
+  .meta{font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--green);
+    margin-right:6px;animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  main{padding:14px;max-width:1200px;margin:0 auto}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .card .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .card .value{font-size:22px;font-weight:700;margin-top:4px}
+  h2{font-size:14px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:22px 0 10px}
+  .signal{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--blue);
+    border-radius:12px;padding:12px;margin-bottom:10px}
+  .signal.buy{border-left-color:var(--green)}
+  .signal.sell{border-left-color:var(--red)}
+  .row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .pair{font-size:17px;font-weight:700}
+  .badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;letter-spacing:.5px}
+  .b-cons{background:rgba(34,201,138,.15);color:var(--green)}
+  .b-std{background:rgba(255,176,32,.15);color:var(--amber)}
+  .b-agg{background:rgba(255,92,116,.15);color:var(--red)}
+  .levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-top:10px;font-size:12px}
+  .levels div{background:var(--panel-2);border-radius:8px;padding:6px 8px}
+  .levels b{display:block;color:var(--muted);font-size:10px;text-transform:uppercase}
+  .bar{height:6px;background:var(--panel-2);border-radius:999px;overflow:hidden;margin-top:8px}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--amber),var(--green))}
+  table{width:100%;border-collapse:collapse;font-size:12px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px}
+  tr:last-child td{border-bottom:none}
+  .st-SIGNAL{color:var(--green);font-weight:700}
+  .st-COOLDOWN{color:var(--amber)}
+  .st-ERROR,.st-NODATA{color:var(--red)}
+  .empty{color:var(--muted);font-size:13px;padding:14px;background:var(--panel);
+    border:1px dashed var(--line);border-radius:12px}
+  footer{padding:18px;text-align:center;color:var(--muted);font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <h1>MORGAN<span>TRADER</span> &middot; Live Signals</h1>
+  <div class="meta">
+    <span><span class="dot"></span><span id="run">connecting…</span></span>
+    <span>Session: <b id="session">-</b></span>
+    <span>UTC: <b id="time">-</b></span>
+    <span>Refresh: 5s</span>
+  </div>
+</header>
+
+<main>
+  <section class="cards">
+    <div class="card"><div class="label">Active signals</div><div class="value" id="c-signals">0</div></div>
+    <div class="card"><div class="label">Total scans</div><div class="value" id="c-scans">0</div></div>
+    <div class="card"><div class="label">Signals fired</div><div class="value" id="c-fired">0</div></div>
+    <div class="card"><div class="label">Pairs watched</div><div class="value" id="c-pairs">{{ symbols|length }}</div></div>
+    <div class="card"><div class="label">Errors</div><div class="value" id="c-errors">0</div></div>
+    <div class="card"><div class="label">Balance</div><div class="value" id="c-balance">-</div></div>
+  </section>
+
+  <h2>Active Signals</h2>
+  <div id="signals"><div class="empty">Waiting for the first scan…</div></div>
+
+  <h2>Pair Status</h2>
+  <table>
+    <thead><tr><th>Pair</th><th>Status</th><th>Price</th><th>Dir</th><th>Score</th><th>Note</th></tr></thead>
+    <tbody id="pairs"><tr><td colspan="6">Loading…</td></tr></tbody>
+  </table>
+</main>
+
+<footer>Morgantrader &middot; data: Yahoo Finance (free) &middot; not financial advice</footer>
+
+<script>
+const tierClass = t => t === 'CONSERVATIVE' ? 'b-cons' : t === 'STANDARD' ? 'b-std' : 'b-agg';
+
+function signalCard(s){
+  const tps = s.take_profits.map((tp,i)=>`<div><b>TP${i+1}</b>${tp}</div>`).join('');
+  return `<div class="signal ${s.direction.toLowerCase()}">
+    <div class="row">
+      <div><span class="pair">${s.symbol}</span>
+        <span class="badge ${tierClass(s.tier)}">${s.direction} &middot; ${s.tier}</span></div>
+      <div><b>${s.confidence}</b>/100</div>
+    </div>
+    <div class="bar"><i style="width:${s.confidence}%"></i></div>
+    <div class="levels">
+      <div><b>Entry</b>${s.entry}</div>
+      <div><b>Stop</b>${s.stop_loss}</div>
+      ${tps}
+      <div><b>Lots</b>${(s.risk&&s.risk.lots)||'-'}</div>
+      <div><b>Risk</b>${(s.risk&&s.risk.risk_percent)||'-'}%</div>
+      <div><b>ADX</b>${s.adx}</div>
+      <div><b>Status</b>${s.status}${(s.tp_hit&&s.tp_hit.length)?' ('+s.tp_hit.join(',')+')':''}</div>
+    </div>
+    <div class="meta" style="margin-top:8px">${s.session} &middot; ${s.timestamp} UTC</div>
+  </div>`;
+}
+
+async function refresh(){
+  try{
+    const res = await fetch('/api/status', {cache:'no-store'});
+    const d = await res.json();
+    document.getElementById('run').textContent = d.scanner_running ? 'scanner running' : 'scanner offline';
+    document.getElementById('session').textContent = d.session || '-';
+    document.getElementById('time').textContent = (d.server_time||'').replace('T',' ');
+    document.getElementById('c-scans').textContent = d.stats.scans || 0;
+    document.getElementById('c-fired').textContent = d.stats.signals || 0;
+    document.getElementById('c-errors').textContent = d.stats.errors || 0;
+    document.getElementById('c-balance').textContent = '$' + (d.balance || 0);
+
+    const active = (d.signals || []).filter(s => s.status === 'ACTIVE');
+    document.getElementById('c-signals').textContent = active.length;
+    document.getElementById('signals').innerHTML = (d.signals && d.signals.length)
+      ? d.signals.map(signalCard).join('')
+      : '<div class="empty">No signals yet. Conditions must align on M5/M15/H1.</div>';
+
+    document.getElementById('pairs').innerHTML = (d.pairs || []).map(p => `<tr>
+      <td><b>${p.symbol}</b></td>
+      <td class="st-${(p.status||'').replace(' ','')}">${p.status}</td>
+      <td>${p.price || '-'}</td>
+      <td>${p.direction || '-'}</td>
+      <td>${p.confidence || 0}</td>
+      <td>${p.reason || ''}</td></tr>`).join('') || '<tr><td colspan="6">No data</td></tr>';
+  }catch(e){
+    document.getElementById('run').textContent = 'connection lost';
+  }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
