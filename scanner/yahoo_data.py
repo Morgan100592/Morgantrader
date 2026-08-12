@@ -34,7 +34,7 @@ RESAMPLE_RULE = {"H4": "4h"}
 class YahooDataFeed:
     """Fetches OHLCV candles from Yahoo Finance with a short-lived cache."""
 
-    def __init__(self, cache_seconds: int = 45):
+    def __init__(self, cache_seconds: int = 300):
         self.cache_seconds = cache_seconds
         self._cache: Dict[str, Tuple[float, pd.DataFrame]] = {}
         self._lock = threading.Lock()
